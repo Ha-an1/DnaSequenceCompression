@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNA Compressor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Basic styles for file dropzone */
+        .drop-zone {
+            border: 2px dashed #cbd5e1;
+            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+        }
+        .drop-zone-dragging {
+            background-color: #e2e8f0;
+            border-color: #94a3b8;
+        }
+        /* Spinner animation */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="h-full flex items-center justify-center font-sans p-6 bg-gradient-to-br from-blue-50 to-indigo-100">
+
+    <div class="w-full max-w-4xl bg-white p-8 rounded-2xl shadow-xl">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-gray-800">DNA Sequence Compressor</h1>
+            <p class="text-lg text-gray-600 mt-2">
+                Powered by Python, Flask, and Context-Adaptive Arithmetic Coding
+            </p>
+        </header>
+
+        <div class="grid md:grid-cols-2 gap-8">
+            
+            <!-- Compression Card -->
+            <div class="flex flex-col p-6 bg-gray-50 rounded-lg shadow-inner border border-gray-200">
+                <h2 class="text-2xl font-semibold text-blue-700 mb-4">1. Compress DNA</h2>
+                <form id="compress-form" class="flex flex-col h-full">
+                    <div id="compress-drop-zone" class="drop-zone relative flex flex-col items-center justify-center p-10 rounded-lg text-center text-gray-500 h-full min-h-[200px]">
+                        <input type="file" id="compress-file-input" accept=".fasta,.fa" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        <p class="font-medium">Drag & drop a <span class="font-bold text-blue-600">.fasta</span> file here</p>
+                        <p class="text-sm">or click to browse</p>
+                        <p id="compress-filename" class="mt-2 text-sm font-semibold text-gray-700"></p>
+                    </div>
+                    <button type="submit" id="compress-button" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg mt-4 hover:bg-blue-700 transition duration-300 disabled:bg-gray-400">
+                        Compress
+                    </button>
+                    <div id="compress-status" class="mt-3 text-center"></div>
+                </form>
+            </div>
+
+            <!-- Decompression Card -->
+            <div class="flex flex-col p-6 bg-gray-50 rounded-lg shadow-inner border border-gray-200">
+                <h2 class="text-2xl font-semibold text-indigo-700 mb-4">2. Decompress DNA</h2>
+                <form id="decompress-form" class="flex flex-col h-full">
+                    <div id="decompress-drop-zone" class="drop-zone relative flex flex-col items-center justify-center p-10 rounded-lg text-center text-gray-500 h-full min-h-[200px]">
+                        <input type="file" id="decompress-file-input" accept=".bin" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <p class="font-medium">Drag & drop a <span class="font-bold text-indigo-600">.bin</span> file here</p>
+                        <p class="text-sm">or click to browse</p>
+                        <p id="decompress-filename" class="mt-2 text-sm font-semibold text-gray-700"></p>
+                    </div>
+                    <button type="submit" id="decompress-button" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg mt-4 hover:bg-indigo-700 transition duration-300 disabled:bg-gray-400">
+                        Decompress
+                    </button>
+                    <div id="decompress-status" class="mt-3 text-center"></div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Shared helper function for handling the file processing
+        async function handleFileProcessing(form, fileInput, endpoint, button, status) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                if (fileInput.files.length === 0) {
+                    showStatus(status, 'Please select a file first.', 'error');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                // Disable button and show spinner
+                button.disabled = true;
+                showStatus(status, `
+                    <div class="flex items-center justify-center">
+                        <div class="spinner w-5 h-5 border-t-2 border-blue-500 rounded-full mr-2"></div>
+                        Processing ${file.name}...
+                    </div>
+                `, 'loading');
+
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Server error');
+                    }
+
+                    // Handle successful file download
+                    const disposition = response.headers.get('Content-Disposition');
+                    let filename = 'download';
+                    if (disposition && disposition.indexOf('attachment') !== -1) {
+                        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                        const matches = filenameRegex.exec(disposition);
+                        if (matches != null && matches[1]) {
+                            filename = matches[1].replace(/['"]/g, '');
+                        }
+                    }
+
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                    
+                    showStatus(status, `Success! Downloading ${filename}.`, 'success');
+
+                } catch (error) {
+                    showStatus(status, `Error: ${error.message}`, 'error');
+                } finally {
+                    // Re-enable button
+                    button.disabled = false;
+                    fileInput.value = null; // Clear file input
+                    document.getElementById(fileInput.id.replace('-file-input', '-filename')).textContent = '';
+                }
+            });
+        }
+
+        // Shared helper function for drag/drop and file selection
+        function setupFileInput(dropZoneId, inputId, filenameId) {
+            const dropZone = document.getElementById(dropZoneId);
+            const fileInput = document.getElementById(inputId);
+            const filenameEl = document.getElementById(filenameId);
+
+            // Trigger file input click when drop zone is clicked
+            dropZone.addEventListener('click', () => fileInput.click());
+
+            // Handle file selection
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    filenameEl.textContent = fileInput.files[0].name;
+                }
+            });
+
+            // Drag and drop events
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+            });
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('drop-zone-dragging');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('drop-zone-dragging');
+                });
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                fileInput.files = e.dataTransfer.files;
+                if (fileInput.files.length > 0) {
+                    filenameEl.textContent = fileInput.files[0].name;
+                }
+            });
+        }
+
+        // Helper to show status messages
+        function showStatus(statusEl, message, type) {
+            statusEl.innerHTML = message;
+            statusEl.className = 'mt-3 text-center ';
+            if (type === 'error') {
+                statusEl.classList.add('text-red-600');
+            } else if (type === 'success') {
+                statusEl.classList.add('text-green-600');
+            } else {
+                statusEl.classList.add('text-gray-700');
+            }
+        }
+
+        // Initialize Compression form
+        handleFileProcessing(
+            document.getElementById('compress-form'),
+            document.getElementById('compress-file-input'),
+            '/compress',
+            document.getElementById('compress-button'),
+            document.getElementById('compress-status')
+        );
+        setupFileInput('compress-drop-zone', 'compress-file-input', 'compress-filename');
+
+        // Initialize Decompression form
+        handleFileProcessing(
+            document.getElementById('decompress-form'),
+            document.getElementById('decompress-file-input'),
+            '/decompress',
+            document.getElementById('decompress-button'),
+            document.getElementById('decompress-status')
+        );
+        setupFileInput('decompress-drop-zone', 'decompress-file-input', 'decompress-filename');
+
+    </script>
+</body>
+</html>
