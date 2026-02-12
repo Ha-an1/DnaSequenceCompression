@@ -114,10 +114,5 @@ Windows:
 ```bash
 fc original.fasta restored.fasta
 ```
-
 If the command returns no output, the compression was perfectly lossless.
 
----
-
-
-Specify your license here (MIT, Apache 2.0, etc.).
